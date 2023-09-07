@@ -1,6 +1,8 @@
 
 # MeshVision
 
+MeshVision is a web tool for uploading 3D STL files, computing triangle areas, and providing heatmap visualizations.
+
 Live Build: https://andrewsink.github.io/MeshVision/
 
 ![MeshVision](https://github.com/AndrewSink/MeshVision/assets/46334898/0ff77902-8ae8-4c00-9ca1-ea3691d8b022)
