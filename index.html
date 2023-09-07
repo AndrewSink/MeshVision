@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+
+    <head>
+        <meta charset="UTF-8">
+        <title>MeshVision</title>
+        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
+        
+      <script type="module" crossorigin src="./assets/index-2b449578.js"></script>
+      <link rel="stylesheet" href="./assets/index-cb8acd9d.css">
+    </head>
+
+    <body>
+        <div class="container-fluid">
+            <div class="row">
+                <div class="col-sm-2 bg-secondary sidebar">
+                    <h5 class="my-3 text-center">MeshVision</h5>
+                    <br>
+                    <button class="btn btn-info my-2" id="uploadButton">Upload .STL</button>
+                    <input type="file" id="fileInput" style="display:none;">
+                    <br>
+                    <br>
+                    <button id="heatmapButton" class="btn btn-primary btn-check my-2">Heatmap
+                        Visualization</button>
+                </div>
+            </div>
+
+
+        </div>
+        <div class="col-sm-10 main-content">
+            <div id="canvas-container"></div>
+            <div class="fixed-height-chart">
+                <canvas id="chart-canvas"></canvas>
+            </div>
+        </div>
+        <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"></script>
+        <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
+        
+
+
+        <div class="credits">
+            <a href="https://github.com/AndrewSink">Andrew Sink - 2023</a>
+            <br>
+    </body>
+
+</html>
