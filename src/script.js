@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import Chart from 'chart.js/auto';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
 const canvasContainer = document.getElementById('canvas-container');
 
@@ -19,16 +20,33 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
 renderer.shadowMap.enabled = true;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
 canvasContainer.appendChild(renderer.domElement);
+
+const pmremGenerator = new THREE.PMREMGenerator(renderer);
+scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
 
 let heatmapApplied = false;
 
-const lightBlue = new THREE.Color(0xadd8e6);
+const meshColor = new THREE.Color(0xa3b1c2);
 
-const ambientLight = new THREE.AmbientLight(0x909090);
-scene.add(ambientLight);
+function createMeshMaterial() {
+    return new THREE.MeshPhysicalMaterial({
+        color: meshColor,
+        metalness: 0.25,
+        roughness: 0.35,
+        clearcoat: 0.4,
+        clearcoatRoughness: 0.25,
+        side: THREE.DoubleSide
+    });
+}
 
-const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+const hemiLight = new THREE.HemisphereLight(0xeaf2ff, 0x394452, 0.55);
+scene.add(hemiLight);
+
+const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6);
 directionalLight.position.set(1, 1, 1);
 scene.add(directionalLight);
 
@@ -36,11 +54,15 @@ const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.2);
 directionalLight2.position.set(15, 15, 15);
 scene.add(directionalLight2);
 
-const directionalLight3 = new THREE.DirectionalLight(0xffffff, 0.2);
+const directionalLight3 = new THREE.DirectionalLight(0xffffff, 0.15);
 directionalLight3.position.set(-10, -10, -10);
 scene.add(directionalLight3);
 
 const NUM_BINS = 20;
+const MIN_BIN_FRACTION = 0.01;
+const OVERFLOW_COLOR = 'rgb(203, 213, 225)';
+const COLOR_WARM = [251, 146, 60];
+const COLOR_COOL = [56, 189, 248];
 
 function lerpColor(c1, c2, t) {
     const r = Math.round(c1[0] + (c2[0] - c1[0]) * t);
@@ -48,9 +70,8 @@ function lerpColor(c1, c2, t) {
     const b = Math.round(c1[2] + (c2[2] - c1[2]) * t);
     return `rgb(${r}, ${g}, ${b})`;
 }
-const BAR_COLORS = Array.from({ length: NUM_BINS }, (_, i) =>
-    lerpColor([251, 146, 60], [56, 189, 248], i / (NUM_BINS - 1))
-);
+
+let chartDescriptions = [];
 
 const chart = new Chart('chart-canvas', {
     type: 'bar',
@@ -59,7 +80,7 @@ const chart = new Chart('chart-canvas', {
         datasets: [{
             label: 'Triangle count',
             data: [],
-            backgroundColor: BAR_COLORS,
+            backgroundColor: [],
             borderWidth: 0,
             borderRadius: 2,
             categoryPercentage: 0.95,
@@ -78,7 +99,7 @@ const chart = new Chart('chart-canvas', {
                         const n = items[0].parsed.y;
                         return `${n.toLocaleString()} triangle${n === 1 ? '' : 's'}`;
                     },
-                    label: (item) => `Around this size: ${item.label} mm²`
+                    label: (item) => chartDescriptions[item.dataIndex] ?? `Around this size: ${item.label} mm²`
                 }
             }
         },
@@ -142,41 +163,93 @@ function describeAreas(positiveSorted) {
 }
 
 function buildHistogram(positiveAreasSorted) {
-    const labels = new Array(NUM_BINS).fill('');
-    const bins = new Array(NUM_BINS).fill(0);
+    const labels = [];
+    const bins = [];
+    const descriptions = [];
+    const colors = [];
 
     if (positiveAreasSorted.length === 0) {
-        return { labels, bins };
+        return { labels, bins, descriptions, colors };
     }
 
     const minArea = positiveAreasSorted[0];
     const maxArea = positiveAreasSorted[positiveAreasSorted.length - 1];
 
     if (minArea === maxArea) {
-        bins[0] = positiveAreasSorted.length;
-        labels[0] = `${Number(minArea).toPrecision(2)} – ${Number(maxArea).toPrecision(2)}`;
-        for (let i = 1; i < NUM_BINS; i++) labels[i] = '';
-        return { labels, bins };
+        labels.push(`${Number(minArea).toPrecision(2)} – ${Number(maxArea).toPrecision(2)}`);
+        bins.push(positiveAreasSorted.length);
+        descriptions.push(`All triangles around ${formatArea(minArea)}`);
+        colors.push(lerpColor(COLOR_WARM, COLOR_COOL, 0.5));
+        return { labels, bins, descriptions, colors };
     }
 
     const logMin = Math.log10(minArea);
     const logMax = Math.log10(maxArea);
     const logBin = (logMax - logMin) / NUM_BINS;
 
+    const rawBins = new Array(NUM_BINS).fill(0);
     for (const area of positiveAreasSorted) {
         let idx = Math.floor((Math.log10(area) - logMin) / logBin);
         if (idx < 0) idx = 0;
         if (idx >= NUM_BINS) idx = NUM_BINS - 1;
-        bins[idx]++;
+        rawBins[idx]++;
     }
 
+    const total = positiveAreasSorted.length;
+    const threshold = total * MIN_BIN_FRACTION;
+
+    let firstSig = -1;
+    let lastSig = -1;
     for (let i = 0; i < NUM_BINS; i++) {
-        const start = Math.pow(10, logMin + i * logBin);
-        const end = Math.pow(10, logMin + (i + 1) * logBin);
-        labels[i] = `${Number(start).toPrecision(2)} – ${Number(end).toPrecision(2)}`;
+        if (rawBins[i] >= threshold) {
+            if (firstSig === -1) firstSig = i;
+            lastSig = i;
+        }
+    }
+    if (firstSig === -1) {
+        firstSig = 0;
+        lastSig = NUM_BINS - 1;
     }
 
-    return { labels, bins };
+    const boundaryAt = (i) => Math.pow(10, logMin + i * logBin);
+
+    if (firstSig > 0) {
+        let sum = 0;
+        for (let i = 0; i < firstSig; i++) sum += rawBins[i];
+        if (sum > 0) {
+            const boundary = boundaryAt(firstSig);
+            labels.push(`< ${Number(boundary).toPrecision(2)}`);
+            bins.push(sum);
+            descriptions.push(`Smaller than ${Number(boundary).toPrecision(2)} mm²`);
+            colors.push(OVERFLOW_COLOR);
+        }
+    }
+
+    const visible = lastSig - firstSig + 1;
+    for (let i = firstSig; i <= lastSig; i++) {
+        const start = boundaryAt(i);
+        const end = boundaryAt(i + 1);
+        const range = `${Number(start).toPrecision(2)} – ${Number(end).toPrecision(2)}`;
+        labels.push(range);
+        bins.push(rawBins[i]);
+        descriptions.push(`Around this size: ${range} mm²`);
+        const t = visible === 1 ? 0.5 : (i - firstSig) / (visible - 1);
+        colors.push(lerpColor(COLOR_WARM, COLOR_COOL, t));
+    }
+
+    if (lastSig < NUM_BINS - 1) {
+        let sum = 0;
+        for (let i = lastSig + 1; i < NUM_BINS; i++) sum += rawBins[i];
+        if (sum > 0) {
+            const boundary = boundaryAt(lastSig + 1);
+            labels.push(`> ${Number(boundary).toPrecision(2)}`);
+            bins.push(sum);
+            descriptions.push(`Larger than ${Number(boundary).toPrecision(2)} mm²`);
+            colors.push(OVERFLOW_COLOR);
+        }
+    }
+
+    return { labels, bins, descriptions, colors };
 }
 
 function renderStats(areas) {
@@ -198,18 +271,28 @@ function renderStats(areas) {
     const summaryEl = document.getElementById('stat-summary');
     if (summaryEl) summaryEl.textContent = describeAreas(positive);
 
-    const { labels, bins } = buildHistogram(positive);
+    const { labels, bins, descriptions, colors } = buildHistogram(positive);
     chart.data.labels = labels;
     chart.data.datasets[0].data = bins;
+    chart.data.datasets[0].backgroundColor = colors;
+    chartDescriptions = descriptions;
     chart.update();
 }
 
 function frameMesh(mesh) {
     const box = new THREE.Box3().setFromObject(mesh);
     const center = box.getCenter(new THREE.Vector3());
-    const size = box.getSize(new THREE.Vector3());
-    const distance = Math.max(size.x, size.y, size.z) || 1;
-    camera.position.set(center.x + distance, center.y + distance, center.z + distance * 3);
+    const sphere = box.getBoundingSphere(new THREE.Sphere());
+    const radius = sphere.radius || 1;
+
+    const fov = (camera.fov * Math.PI) / 180;
+    const verticalDist = radius / Math.sin(fov / 2);
+    const horizontalFov = 2 * Math.atan(camera.aspect * Math.tan(fov / 2));
+    const horizontalDist = radius / Math.sin(horizontalFov / 2);
+    const distance = Math.max(verticalDist, horizontalDist) * 1.1;
+
+    const direction = new THREE.Vector3(1, 1, 3).normalize();
+    camera.position.copy(center).addScaledVector(direction, distance);
     controls.target.copy(center);
     controls.update();
 }
@@ -218,10 +301,7 @@ const loader = new STLLoader();
 loader.load('low_poly_scan.stl', function (geometry) {
     geometry.rotateX(-Math.PI / 2);
 
-    const material = new THREE.MeshStandardMaterial({ color: lightBlue });
-    material.receiveShadow = true;
-    material.castShadow = true;
-    material.side = THREE.DoubleSide;
+    const material = createMeshMaterial();
 
     const mesh = new THREE.Mesh(geometry, material);
     mesh.name = 'userMesh';
@@ -282,8 +362,7 @@ document.getElementById('fileInput').addEventListener('change', function () {
             translateToPositiveCoordinates(geometry);
         }
 
-        const material = new THREE.MeshStandardMaterial({ color: lightBlue });
-        material.side = THREE.DoubleSide;
+        const material = createMeshMaterial();
 
         const mesh = new THREE.Mesh(geometry, material);
         mesh.name = 'userMesh';
@@ -332,7 +411,7 @@ document.getElementById('heatmapButton').addEventListener('click', function () {
 
     if (heatmapApplied) {
         userMesh.material.vertexColors = false;
-        userMesh.material.color = new THREE.Color(lightBlue);
+        userMesh.material.color.copy(meshColor);
         userMesh.material.needsUpdate = true;
         heatmapApplied = false;
         return;
@@ -385,8 +464,8 @@ document.getElementById('heatmapButton').addEventListener('click', function () {
 
 function getColorFromGradient(value) {
     const gradient = [
-        { value: 0.0, color: 0x0000ff },
-        { value: 1.0, color: 0x00ff00 }
+        { value: 0.0, color: 0xfb923c },
+        { value: 1.0, color: 0x38bdf8 }
     ];
 
     if (value <= gradient[0].value) {
