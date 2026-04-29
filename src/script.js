@@ -320,6 +320,8 @@ loader.load('low_poly_scan.stl', function (geometry) {
     };
 
     renderStats(computeTriangleAreas(geometry));
+
+    document.getElementById('heatmapButton').click();
 }, undefined, function (error) {
     console.error('An error happened', error);
 });
@@ -380,6 +382,8 @@ document.getElementById('fileInput').addEventListener('change', function () {
         frameMesh(mesh);
 
         renderStats(computeTriangleAreas(geometry));
+
+        document.getElementById('heatmapButton').click();
     });
     reader.readAsArrayBuffer(file);
 });
