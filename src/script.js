@@ -110,7 +110,7 @@ const chart = new Chart('chart-canvas', {
                 grid: { display: false }
             },
             y: {
-                title: { display: true, text: 'How many triangles', color: '#475569' },
+                title: { display: true, text: 'Triangle count', color: '#475569' },
                 ticks: { color: '#64748b' },
                 grid: { color: 'rgba(148, 163, 184, 0.2)' },
                 beginAtZero: true
