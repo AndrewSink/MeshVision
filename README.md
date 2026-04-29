@@ -27,6 +27,10 @@ MeshVision is a web-based tool designed to visualize and analyze 3D mesh structu
 3. **Heatmap**: The heatmap will automatically update to represent the size of each triangle.
 4. **Chart View**: Scroll down to see the chart that represents the area distribution.
 
+## Development
+
+MeshVision is a buildless static site — no `npm` or build step is required. Open `index.html` in any modern browser (or serve the repo root with any static file server). Dependencies (three.js, chart.js, Tailwind) are loaded directly from CDNs via an ES module importmap.
+
 ## Acknowledgements
 
 - [THREE.js](https://threejs.org/)

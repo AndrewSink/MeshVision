@@ -1,47 +1,96 @@
 <!DOCTYPE html>
 <html lang="en">
 
-    <head>
-        <meta charset="UTF-8">
-        <title>MeshVision</title>
-        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
-        
-      <script type="module" crossorigin src="./assets/index-2b449578.js"></script>
-      <link rel="stylesheet" href="./assets/index-cb8acd9d.css">
-    </head>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MeshVision</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "https://esm.sh/three@0.158.0",
+        "three/examples/jsm/controls/OrbitControls": "https://esm.sh/three@0.158.0/examples/jsm/controls/OrbitControls.js",
+        "three/examples/jsm/loaders/STLLoader.js": "https://esm.sh/three@0.158.0/examples/jsm/loaders/STLLoader.js",
+        "chart.js/auto": "https://esm.sh/chart.js@4.4.0/auto"
+      }
+    }
+    </script>
+    <style>
+        html, body { height: 100%; }
+        #canvas-container > canvas { display: block; width: 100% !important; height: 100% !important; }
+    </style>
+</head>
 
-    <body>
-        <div class="container-fluid">
-            <div class="row">
-                <div class="col-sm-2 bg-secondary sidebar">
-                    <h5 class="my-3 text-center">MeshVision</h5>
-                    <br>
-                    <button class="btn btn-info my-2" id="uploadButton">Upload .STL</button>
-                    <input type="file" id="fileInput" style="display:none;">
-                    <br>
-                    <br>
-                    <button id="heatmapButton" class="btn btn-primary btn-check my-2">Heatmap
-                        Visualization</button>
+<body class="h-full bg-slate-50 text-slate-900 antialiased">
+    <div class="flex h-full flex-col">
+        <header class="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white/90 px-6 py-3 backdrop-blur">
+            <div class="flex items-center gap-2">
+                <div class="h-8 w-8 rounded-lg bg-gradient-to-br from-sky-500 to-indigo-600"></div>
+                <h1 class="text-lg font-semibold tracking-tight">MeshVision</h1>
+            </div>
+            <div class="flex items-center gap-2">
+                <button id="uploadButton"
+                    class="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2">
+                    Upload .STL
+                </button>
+                <input type="file" id="fileInput" accept=".stl" class="hidden">
+                <button id="heatmapButton"
+                    class="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 shadow-sm transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2">
+                    Toggle heatmap
+                </button>
+            </div>
+        </header>
+
+        <main class="grid flex-1 min-h-0 grid-cols-1 gap-4 p-4 lg:grid-cols-3">
+            <section class="lg:col-span-2 min-h-0 overflow-hidden rounded-xl bg-slate-100 shadow-inner ring-1 ring-slate-200">
+                <div id="canvas-container" class="h-full w-full"></div>
+            </section>
+
+            <aside class="flex min-h-0 flex-col gap-4">
+                <div class="rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+                    <h2 class="text-sm font-semibold text-slate-700">Triangle statistics</h2>
+                    <p class="mt-1 text-xs text-slate-500">Sizes of the triangles in your model</p>
+                    <dl class="mt-4 grid grid-cols-2 gap-3 text-sm">
+                        <div class="rounded-lg bg-slate-50 p-3 ring-1 ring-slate-200 col-span-2">
+                            <dt class="text-xs uppercase tracking-wide text-slate-500">Total triangles</dt>
+                            <dd id="stat-count" class="mt-1 text-xl font-semibold tabular-nums text-slate-900">—</dd>
+                        </div>
+                        <div class="rounded-lg bg-slate-50 p-3 ring-1 ring-slate-200">
+                            <dt class="text-xs uppercase tracking-wide text-slate-500">Smallest</dt>
+                            <dd id="stat-min" class="mt-1 text-base font-semibold tabular-nums text-slate-900">—</dd>
+                        </div>
+                        <div class="rounded-lg bg-slate-50 p-3 ring-1 ring-slate-200">
+                            <dt class="text-xs uppercase tracking-wide text-slate-500">Typical</dt>
+                            <dd id="stat-median" class="mt-1 text-base font-semibold tabular-nums text-slate-900">—</dd>
+                        </div>
+                        <div class="rounded-lg bg-slate-50 p-3 ring-1 ring-slate-200">
+                            <dt class="text-xs uppercase tracking-wide text-slate-500">Average</dt>
+                            <dd id="stat-mean" class="mt-1 text-base font-semibold tabular-nums text-slate-900">—</dd>
+                        </div>
+                        <div class="rounded-lg bg-slate-50 p-3 ring-1 ring-slate-200">
+                            <dt class="text-xs uppercase tracking-wide text-slate-500">Largest</dt>
+                            <dd id="stat-max" class="mt-1 text-base font-semibold tabular-nums text-slate-900">—</dd>
+                        </div>
+                    </dl>
                 </div>
-            </div>
 
+                <div class="flex min-h-0 flex-1 flex-col rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+                    <h2 class="text-sm font-semibold text-slate-700">Size distribution</h2>
+                    <p id="stat-summary" class="mt-1 text-xs text-slate-500">—</p>
+                    <div class="relative mt-3 min-h-[220px] flex-1">
+                        <canvas id="chart-canvas"></canvas>
+                    </div>
+                </div>
+            </aside>
+        </main>
 
-        </div>
-        <div class="col-sm-10 main-content">
-            <div id="canvas-container"></div>
-            <div class="fixed-height-chart">
-                <canvas id="chart-canvas"></canvas>
-            </div>
-        </div>
-        <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"></script>
-        <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
-        
+        <footer class="px-6 py-2 text-xs text-slate-500">
+            <a href="https://github.com/AndrewSink" class="hover:text-slate-900">Andrew Sink — 2023</a>
+        </footer>
+    </div>
 
-
-        <div class="credits">
-            <a href="https://github.com/AndrewSink">Andrew Sink - 2023</a>
-            <br>
-    </body>
+    <script type="module" src="./src/script.js"></script>
+</body>
 
 </html>
